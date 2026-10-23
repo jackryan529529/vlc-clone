@@ -1,0 +1,12 @@
+{
+  "background_color": "#b75e5e",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "VLC CLONE",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "Vlcc",
+  "start_url": "/",
+  "theme_color": "#181338",
+  "description": "Vlccion when 3"
+}
