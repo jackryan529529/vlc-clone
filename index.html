@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VLC Web Media Player</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            vlc: {
+              orange: '#FF8800',
+              orangeDark: '#E07700',
+              dark: '#121214',
+              panel: '#1E1E22',
+              hover: '#2A2A30',
+              accent: '#FF9E2A'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #121214;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #333338;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #FF8800;
+    }
+
+    /* Range slider styling */
+    input[type=range] {
+      -webkit-appearance: none;
+      background: transparent;
+    }
+    input[type=range]:focus {
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 6px;
+      cursor: pointer;
+      background: #333338;
+      border-radius: 3px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      height: 14px;
+      width: 14px;
+      border-radius: 50%;
+      background: #FF8800;
+      cursor: pointer;
+      -webkit-appearance: none;
+      margin-top: -4px;
+      transition: transform 0.1s ease, background-color 0.1s ease;
+    }
+    input[type=range]:hover::-webkit-slider-thumb {
+      transform: scale(1.2);
+      background: #FF9E2A;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans select-none overflow-hidden bg-vlc-dark text-slate-200">
+
+  <!-- TOP BAR / HEADER -->
+  <header class="h-14 bg-vlc-panel border-b border-white/5 px-4 flex items-center justify-between z-20 shrink-0">
+    <div class="flex items-center space-x-3">
+      <!-- VLC Cone Logo Icon -->
+      <div class="w-9 h-9 rounded-lg bg-vlc-orange/20 border border-vlc-orange/40 flex items-center justify-center text-vlc-orange shadow-lg shadow-vlc-orange/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 fill-vlc-orange stroke-vlc-dark" viewBox="0 0 24 24">
+          <path d="M12 2L4 18h16L12 2zm0 4l5.33 12H6.67L12 6z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">
+          VLC Web Player
+          <span class="text-[10px] bg-vlc-orange/20 text-vlc-orange px-1.5 py-0.5 rounded font-mono font-semibold">v1.0</span>
+        </h1>
+        <p class="text-[11px] text-slate-400 truncate max-w-[200px] sm:max-w-xs" id="now-playing-title">No file loaded</p>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center space-x-2">
+      <label for="file-input" class="cursor-pointer bg-vlc-orange hover:bg-vlc-orangeDark text-slate-950 font-semibold text-xs px-3 py-2 rounded-md flex items-center gap-1.5 transition-all shadow-md hover:shadow-vlc-orange/20 active:scale-95">
+        <i data-lucide="folder-plus" class="w-4 h-4"></i>
+        <span class="hidden sm:inline">Open Files</span>
+      </label>
+      <input type="file" id="file-input" multiple accept="video/*,audio/*" class="hidden">
+
+      <button id="toggle-sidebar-btn" class="p-2 hover:bg-vlc-hover text-slate-300 hover:text-white rounded-md transition-colors" title="Toggle Playlist Sidebar">
+        <i data-lucide="list-music" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT (Video display + Sidebar) -->
+  <div class="flex-1 flex min-h-0 relative">
+
+    <!-- MEDIA DISPLAY AREA -->
+    <main class="flex-1 bg-black relative flex items-center justify-center overflow-hidden group" id="media-container">
+      
+      <!-- Video Element -->
+      <video id="video-player" class="w-full h-full object-contain hidden" playsinline></video>
+
+      <!-- Audio Visualizer Canvas -->
+      <canvas id="visualizer-canvas" class="w-full h-full absolute inset-0 hidden pointer-events-none"></canvas>
+
+      <!-- Placeholder / Empty State -->
+      <div id="empty-state" class="flex flex-col items-center justify-center text-center p-6 space-y-4 max-w-md z-10">
+        <div class="w-20 h-20 rounded-full bg-vlc-panel border border-white/10 flex items-center justify-center text-vlc-orange shadow-2xl">
+          <i data-lucide="clapperboard" class="w-10 h-10"></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-semibold text-white">No Media Playing</h2>
+          <p class="text-xs text-slate-400 mt-1">Open media files from your device to start playback with full VLC style controls.</p>
+        </div>
+        <button id="empty-open-btn" class="bg-vlc-hover hover:bg-white/10 text-slate-200 border border-white/10 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2 transition-all">
+          <i data-lucide="file-up" class="w-4 h-4 text-vlc-orange"></i>
+          Choose Local Files
+        </button>
+      </div>
+
+      <!-- On-Screen Flash Indicator (For Play/Pause/Seek shortcuts) -->
+      <div id="osd-indicator" class="absolute pointer-events-none opacity-0 transition-opacity duration-300 bg-black/70 backdrop-blur-md text-white px-4 py-3 rounded-xl flex items-center gap-2 border border-white/10 shadow-2xl">
+        <i id="osd-icon" data-lucide="play" class="w-6 h-6 text-vlc-orange"></i>
+        <span id="osd-text" class="text-sm font-semibold">Play</span>
+      </div>
+    </main>
+
+    <!-- SIDEBAR PLAYLIST -->
+    <aside id="playlist-sidebar" class="w-72 bg-vlc-panel border-l border-white/5 flex flex-col shrink-0 transition-all duration-300 absolute md:relative right-0 top-0 bottom-0 z-30 shadow-2xl md:shadow-none translate-x-full md:translate-x-0">
+      <div class="p-3.5 border-b border-white/5 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="list" class="w-4 h-4 text-vlc-orange"></i>
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Playlist</span>
+          <span id="playlist-count" class="text-[10px] bg-white/10 text-slate-300 px-1.5 py-0.5 rounded-full">0</span>
+        </div>
+        <button id="clear-playlist-btn" class="text-[11px] text-slate-400 hover:text-red-400 flex items-center gap-1 transition-colors">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Clear
+        </button>
+      </div>
+
+      <!-- File Drop Area / List Container -->
+      <div id="playlist-items" class="flex-1 overflow-y-auto p-2 space-y-1">
+        <!-- Playlist item template populated by JS -->
+      </div>
+
+      <!-- Sidebar Footer Info -->
+      <div class="p-3 bg-vlc-dark/50 border-t border-white/5 text-[11px] text-slate-500 space-y-1">
+        <div class="flex justify-between">
+          <span>Shortcuts:</span>
+          <span class="text-slate-400">Space, F, ← →, ↑ ↓</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- BOTTOM CONTROL BAR -->
+  <footer class="bg-vlc-panel border-t border-white/5 px-4 py-3 z-20 shrink-0 space-y-2">
+    <!-- Seeker & Timers -->
+    <div class="flex items-center gap-3">
+      <span id="time-current" class="text-xs font-mono text-slate-400 w-12 text-right">00:00</span>
+      <div class="relative flex-1 flex items-center">
+        <input type="range" id="seek-bar" min="0" max="100" value="0" step="0.1" class="w-full h-1.5 accent-vlc-orange cursor-pointer">
+      </div>
+      <span id="time-total" class="text-xs font-mono text-slate-400 w-12">00:00</span>
+    </div>
+
+    <!-- Control Buttons Layer -->
+    <div class="flex items-center justify-between gap-2 pt-1">
+      
+      <!-- Left Controls (Playback speeds & Info) -->
+      <div class="flex items-center space-x-1 sm:space-x-2">
+        <button id="speed-btn" class="px-2 py-1 text-[11px] font-mono font-semibold bg-vlc-dark hover:bg-vlc-hover text-vlc-orange border border-white/10 rounded transition-colors" title="Playback Speed">
+          1.0x
+        </button>
+        <button id="repeat-btn" class="p-2 hover:bg-vlc-hover text-slate-400 hover:text-white rounded-md transition-colors" title="Toggle Loop/Repeat">
+          <i data-lucide="repeat" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Main Playback Controls -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <button id="prev-btn" class="p-2 hover:bg-vlc-hover text-slate-300 hover:text-white rounded-md transition-colors active:scale-95" title="Previous Track">
+          <i data-lucide="skip-back" class="w-5 h-5"></i>
+        </button>
+        <button id="rewind-btn" class="p-2 hover:bg-vlc-hover text-slate-400 hover:text-white rounded-md transition-colors active:scale-95" title="Rewind 10s">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </button>
+        
+        <!-- Big Play/Pause Button -->
+        <button id="play-btn" class="w-11 h-11 bg-vlc-orange hover:bg-vlc-orangeDark text-slate-950 rounded-full flex items-center justify-center shadow-lg shadow-vlc-orange/20 transition-all active:scale-90">
+          <i data-lucide="play" class="w-5 h-5 fill-slate-950 ml-0.5" id="play-icon"></i>
+        </button>
+
+        <button id="forward-btn" class="p-2 hover:bg-vlc-hover text-slate-400 hover:text-white rounded-md transition-colors active:scale-95" title="Forward 10s">
+          <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+        </button>
+        <button id="next-btn" class="p-2 hover:bg-vlc-hover text-slate-300 hover:text-white rounded-md transition-colors active:scale-95" title="Next Track">
+          <i data-lucide="skip-forward" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Right Controls (Volume & Screen) -->
+      <div class="flex items-center space-x-2">
+        <div class="flex items-center space-x-1.5 group">
+          <button id="mute-btn" class="p-1.5 hover:bg-vlc-hover text-slate-300 hover:text-white rounded-md transition-colors">
+            <i data-lucide="volume-2" class="w-4 h-4" id="volume-icon"></i>
+          </button>
+          <input type="range" id="volume-bar" min="0" max="1" step="0.05" value="1" class="w-16 sm:w-20 h-1.5 accent-vlc-orange">
+        </div>
+
+        <button id="fullscreen-btn" class="p-2 hover:bg-vlc-hover text-slate-300 hover:text-white rounded-md transition-colors" title="Toggle Fullscreen (F)">
+          <i data-lucide="maximize" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- JAVASCRIPT APP LOGIC -->
+  <script>
+    // Initialize icons
+    lucide.createIcons();
+
+    // DOM Elements
+    const fileInput = document.getElementById('file-input');
+    const video = document.getElementById('video-player');
+    const canvas = document.getElementById('visualizer-canvas');
+    const canvasCtx = canvas.getContext('2d');
+    const emptyState = document.getElementById('empty-state');
+    const emptyOpenBtn = document.getElementById('empty-open-btn');
+    const mediaContainer = document.getElementById('media-container');
+
+    const playBtn = document.getElementById('play-btn');
+    const playIcon = document.getElementById('play-icon');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const rewindBtn = document.getElementById('rewind-btn');
+    const forwardBtn = document.getElementById('forward-btn');
+    const seekBar = document.getElementById('seek-bar');
+    const timeCurrent = document.getElementById('time-current');
+    const timeTotal = document.getElementById('time-total');
+
+    const volumeBar = document.getElementById('volume-bar');
+    const muteBtn = document.getElementById('mute-btn');
+    const volumeIcon = document.getElementById('volume-icon');
+
+    const speedBtn = document.getElementById('speed-btn');
+    const repeatBtn = document.getElementById('repeat-btn');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+    const playlistSidebar = document.getElementById('playlist-sidebar');
+    const playlistItems = document.getElementById('playlist-items');
+    const playlistCount = document.getElementById('playlist-count');
+    const clearPlaylistBtn = document.getElementById('clear-playlist-btn');
+    const nowPlayingTitle = document.getElementById('now-playing-title');
+
+    const osdIndicator = document.getElementById('osd-indicator');
+    const osdIcon = document.getElementById('osd-icon');
+    const osdText = document.getElementById('osd-text');
+
+    // State Variables
+    let playlist = [];
+    let currentIndex = -1;
+    let isAudioFile = false;
+    let isLooping = false;
+    let speeds = [0.5, 1.0, 1.25, 1.5, 2.0];
+    let currentSpeedIndex = 1;
+
+    // Web Audio API Context for Audio Visualizer
+    let audioCtx = null;
+    let audioSource = null;
+    let analyser = null;
+    let animFrameId = null;
+
+    // --- FILE HANDLING & PLAYLIST ---
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+    emptyOpenBtn.addEventListener('click', () => fileInput.click());
+
+    function handleFiles(files) {
+      const addedFiles = Array.from(files).filter(f => f.type.startsWith('video/') || f.type.startsWith('audio/'));
+      if (addedFiles.length === 0) return;
+
+      const startIndex = playlist.length;
+      addedFiles.forEach(file => {
+        playlist.push({
+          name: file.name,
+          url: URL.createObjectURL(file),
+          type: file.type
+        });
+      });
+
+      renderPlaylist();
+      if (currentIndex === -1) {
+        loadMedia(startIndex);
+      }
+    }
+
+    function renderPlaylist() {
+      playlistItems.innerHTML = '';
+      playlistCount.textContent = playlist.length;
+
+      playlist.forEach((item, index) => {
+        const isCurrent = index === currentIndex;
+        const itemEl = document.createElement('div');
+        itemEl.className = `p-2.5 rounded-lg text-xs flex items-center justify-between gap-2 cursor-pointer transition-all ${
+          isCurrent 
+            ? 'bg-vlc-orange/20 text-vlc-orange font-semibold border border-vlc-orange/30' 
+            : 'hover:bg-vlc-hover text-slate-300'
+        }`;
+
+        const isAudio = item.type.startsWith('audio/');
+
+        itemEl.innerHTML = `
+          <div class="flex items-center gap-2 truncate">
+            <i data-lucide="${isAudio ? 'music' : 'film'}" class="w-4 h-4 shrink-0 ${isCurrent ? 'text-vlc-orange' : 'text-slate-400'}"></i>
+            <span class="truncate">${item.name}</span>
+          </div>
+          ${isCurrent ? '<i data-lucide="volume-2" class="w-3.5 h-3.5 text-vlc-orange animate-pulse shrink-0"></i>' : ''}
+        `;
+
+        itemEl.addEventListener('click', () => loadMedia(index));
+        playlistItems.appendChild(itemEl);
+      });
+
+      lucide.createIcons();
+    }
+
+    clearPlaylistBtn.addEventListener('click', () => {
+      playlist = [];
+      currentIndex = -1;
+      video.pause();
+      video.src = '';
+      video.classList.add('hidden');
+      canvas.classList.add('hidden');
+      emptyState.classList.remove('hidden');
+      nowPlayingTitle.textContent = 'No file loaded';
+      renderPlaylist();
+    });
+
+    // --- MEDIA LOADING & PLAYBACK ---
+    function loadMedia(index) {
+      if (index < 0 || index >= playlist.length) return;
+      currentIndex = index;
+      const media = playlist[currentIndex];
+
+      isAudioFile = media.type.startsWith('audio/');
+      video.src = media.url;
+      video.load();
+
+      nowPlayingTitle.textContent = media.name;
+      emptyState.classList.add('hidden');
+
+      if (isAudioFile) {
+        video.classList.add('hidden');
+        canvas.classList.remove('hidden');
+        setupAudioVisualizer();
+      } else {
+        canvas.classList.add('hidden');
+        video.classList.remove('hidden');
+      }
+
+      video.play().then(() => {
+        updatePlayStateUI(true);
+      }).catch(err => console.log('Playback interrupted:', err));
+
+      renderPlaylist();
+    }
+
+    function togglePlay() {
+      if (!video.src) return;
+      if (video.paused) {
+        video.play();
+        updatePlayStateUI(true);
+        showOSD('play', 'Play');
+      } else {
+        video.pause();
+        updatePlayStateUI(false);
+        showOSD('pause', 'Pause');
+      }
+    }
+
+    function updatePlayStateUI(isPlaying) {
+      playIcon.setAttribute('data-lucide', isPlaying ? 'pause' : 'play');
+      lucide.createIcons();
+    }
+
+    playBtn.addEventListener('click', togglePlay);
+    video.addEventListener('click', togglePlay);
+
+    prevBtn.addEventListener('click', () => {
+      if (currentIndex > 0) loadMedia(currentIndex - 1);
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (currentIndex < playlist.length - 1) loadMedia(currentIndex + 1);
+    });
+
+    rewindBtn.addEventListener('click', () => {
+      video.currentTime = Math.max(0, video.currentTime - 10);
+      showOSD('rotate-ccw', '-10s');
+    });
+
+    forwardBtn.addEventListener('click', () => {
+      video.currentTime = Math.min(video.duration, video.currentTime + 10);
+      showOSD('rotate-cw', '+10s');
+    });
+
+    // --- TIME & SEEKBAR ---
+    video.addEventListener('timeupdate', () => {
+      if (!isNaN(video.duration)) {
+        const pct = (video.currentTime / video.duration) * 100;
+        seekBar.value = pct;
+        timeCurrent.textContent = formatTime(video.currentTime);
+        timeTotal.textContent = formatTime(video.duration);
+      }
+    });
+
+    seekBar.addEventListener('input', (e) => {
+      if (!isNaN(video.duration)) {
+        video.currentTime = (e.target.value / 100) * video.duration;
+      }
+    });
+
+    video.addEventListener('ended', () => {
+      if (isLooping) {
+        video.play();
+      } else if (currentIndex < playlist.length - 1) {
+        loadMedia(currentIndex + 1);
+      } else {
+        updatePlayStateUI(false);
+      }
+    });
+
+    function formatTime(seconds) {
+      const min = Math.floor(seconds / 60);
+      const sec = Math.floor(seconds % 60);
+      return `${min < 10 ? '0' : ''}${min}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    // --- VOLUME CONTROL ---
+    volumeBar.addEventListener('input', (e) => {
+      video.volume = e.target.value;
+      video.muted = (video.volume === 0);
+      updateVolumeIcon();
+    });
+
+    muteBtn.addEventListener('click', () => {
+      video.muted = !video.muted;
+      updateVolumeIcon();
+    });
+
+    function updateVolumeIcon() {
+      let icon = 'volume-2';
+      if (video.muted || video.volume === 0) icon = 'volume-x';
+      else if (video.volume < 0.5) icon = 'volume-1';
+      volumeIcon.setAttribute('data-lucide', icon);
+      lucide.createIcons();
+    }
+
+    // --- SPEED & LOOP ---
+    speedBtn.addEventListener('click', () => {
+      currentSpeedIndex = (currentSpeedIndex + 1) % speeds.length;
+      const speed = speeds[currentSpeedIndex];
+      video.playbackRate = speed;
+      speedBtn.textContent = `${speed}x`;
+      showOSD('gauge', `Speed: ${speed}x`);
+    });
+
+    repeatBtn.addEventListener('click', () => {
+      isLooping = !isLooping;
+      repeatBtn.classList.toggle('text-vlc-orange', isLooping);
+      showOSD('repeat', isLooping ? 'Loop On' : 'Loop Off');
+    });
+
+    // --- FULLSCREEN ---
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        mediaContainer.requestFullscreen().catch(err => console.log(err));
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    // --- SIDEBAR TOGGLE ---
+    toggleSidebarBtn.addEventListener('click', () => {
+      playlistSidebar.classList.toggle('translate-x-full');
+      playlistSidebar.classList.toggle('md:translate-x-0');
+    });
+
+    // --- KEYBOARD SHORTCUTS ---
+    document.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'KeyF':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          video.currentTime = Math.max(0, video.currentTime - 5);
+          showOSD('rewind', '-5s');
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          video.currentTime = Math.min(video.duration, video.currentTime + 5);
+          showOSD('fast-forward', '+5s');
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          video.volume = Math.min(1, video.volume + 0.1);
+          volumeBar.value = video.volume;
+          updateVolumeIcon();
+          showOSD('volume-2', `Vol: ${Math.round(video.volume * 100)}%`);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          video.volume = Math.max(0, video.volume - 0.1);
+          volumeBar.value = video.volume;
+          updateVolumeIcon();
+          showOSD('volume-1', `Vol: ${Math.round(video.volume * 100)}%`);
+          break;
+      }
+    });
+
+    // --- OSD NOTIFICATION ---
+    let osdTimeout;
+    function showOSD(iconName, text) {
+      osdIcon.setAttribute('data-lucide', iconName);
+      osdText.textContent = text;
+      lucide.createIcons();
+
+      osdIndicator.classList.remove('opacity-0');
+      clearTimeout(osdTimeout);
+      osdTimeout = setTimeout(() => {
+        osdIndicator.classList.add('opacity-0');
+      }, 1000);
+    }
+
+    // --- AUDIO VISUALIZER (Web Audio API) ---
+    function setupAudioVisualizer() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        audioSource = audioCtx.createMediaElementSource(video);
+        audioSource.connect(analyser);
+        analyser.connect(audioCtx.destination);
+      }
+
+      analyser.fftSize = 128;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      function resizeCanvas() {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      function draw() {
+        if (!isAudioFile || video.paused) {
+          animFrameId = requestAnimationFrame(draw);
+          return;
+        }
+
+        animFrameId = requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(dataArray);
+
+        canvasCtx.fillStyle = '#121214';
+        canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const barWidth = (canvas.width / bufferLength) * 2;
+        let x = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+          const barHeight = (dataArray[i] / 255) * (canvas.height * 0.7);
+
+          // Orange gradient glow for VLC theme
+          const gradient = canvasCtx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
+          gradient.addColorStop(0, '#FF8800');
+          gradient.addColorStop(1, '#FFD000');
+
+          canvasCtx.fillStyle = gradient;
+          canvasCtx.fillRect(x, canvas.height - barHeight, barWidth - 2, barHeight);
+
+          x += barWidth;
+        }
+      }
+
+      cancelAnimationFrame(animFrameId);
+      draw();
+    }
+  </script>
+</body>
+</html>
+```
